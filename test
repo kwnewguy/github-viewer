@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GitHub Pages测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        h1 {
+            font-size: 2.5em;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎉 GitHub Pages 工作正常！</h1>
+    <p>如果看到这个页面，说明部署成功！</p>
+    <p>现在可以上传完整的应用了。</p>
+</body>
+</html>
