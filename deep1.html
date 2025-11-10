@@ -1,0 +1,996 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=yes" />
+<title>房屋出租收费单 — 跨平台填写系统</title>
+
+<!-- 依赖库 -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<style>
+  /* 跨平台优化 */
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft Yahei", "PingFang SC", sans-serif;
+    margin: 0;
+    padding: 12px;
+    background: #f4f6f9;
+    color: #111;
+    line-height: 1.5;
+  }
+  
+  h2 {
+    margin: 0 0 8px 0;
+    font-size: clamp(18px, 4vw, 24px);
+    font-weight: 600;
+  }
+  
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: clamp(12px, 3vw, 16px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 16px;
+    border: 1px solid #e1e5e9;
+  }
+  
+  label {
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+    display: block;
+    margin-bottom: 6px;
+  }
+  
+  input, select, button, textarea {
+    font-size: 16px; /* 防止iOS缩放 */
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #d6d9e0;
+    background: #fff;
+    width: 100%;
+    margin-bottom: 8px;
+    transition: all 0.2s ease;
+  }
+  
+  input:focus, select:focus {
+    border-color: #2563eb;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+  
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .btn {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+    text-align: center;
+    transition: all 0.2s ease;
+    flex: 1;
+    min-width: 120px;
+  }
+  
+  .btn:hover {
+    background: #1d4ed8;
+  }
+  
+  .btn:active {
+    transform: scale(0.98);
+  }
+  
+  .btn.secondary {
+    background: #6b7280;
+  }
+  
+  .btn.secondary:hover {
+    background: #4b5563;
+  }
+  
+  .btn.small {
+    padding: 8px 12px;
+    font-size: 13px;
+    min-width: 80px;
+  }
+  
+  .muted {
+    color: #666;
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  
+  .flex {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  
+  .numeric {
+    text-align: right;
+  }
+  
+  /* 表格容器 - 响应式设计 */
+  .table-preview {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    background: #fff;
+    max-width: 100%;
+  }
+  
+  .table-preview table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px; /* 保证表格在移动端可以横向滚动 */
+  }
+  
+  .table-preview th, .table-preview td {
+    border: 1px solid #e1e5e9;
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  
+  .table-preview th {
+    background: #f8fafc;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  
+  .table-preview input {
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 14px;
+    border: 1px solid #e1e5e9;
+    border-radius: 4px;
+    width: 100%;
+    min-width: 60px;
+  }
+  
+  /* 导出模板样式 */
+  .export-template { 
+    font-family: "Arial", "Microsoft Yahei", sans-serif; 
+    background: #fff; 
+    padding: 20px; 
+  }
+  
+  .export-template .tg {
+    border-collapse: collapse;
+    border-spacing: 0; 
+    width: 100%;
+  }
+  
+  .export-template td, .export-template th {
+    border-color: black;
+    border-style: solid;
+    border-width: 1px;
+    font-size: 24px;
+    padding: 15px 8px;
+    word-break: normal;
+  }
+  
+  .export-template .tg-rzxb {
+    font-size: 32px;
+    font-weight: bold;
+    text-align: center;
+    vertical-align: middle;
+  }
+  
+  .export-template .tg-gqad {
+    font-size: 26px;
+    text-align: center;
+    vertical-align: middle;
+  }
+  
+  .export-template .tg-nrix {
+    text-align: center;
+    vertical-align: middle;
+  }
+  
+  /* 隐藏 printArea（导出时临时显示） */
+  #printArea {
+    display: none;
+  }
+  
+  /* 响应式设计 */
+  @media (max-width: 768px) {
+    body {
+      padding: 8px;
+    }
+    
+    .card {
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    
+    .controls {
+      flex-direction: column;
+    }
+    
+    .btn {
+      width: 100%;
+      min-width: auto;
+    }
+    
+    .flex {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+    
+    /* 移动端表格优化 */
+    .table-preview {
+      font-size: 13px;
+    }
+    
+    .table-preview th, .table-preview td {
+      padding: 8px 4px;
+    }
+    
+    .table-preview input {
+      padding: 4px 6px;
+      font-size: 13px;
+    }
+    
+    /* 移动端按钮组优化 */
+    .button-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    
+    .button-group .btn {
+      margin: 0;
+    }
+  }
+  
+  @media (min-width: 769px) {
+    .table-container {
+      max-height: 60vh;
+      overflow: auto;
+    }
+    
+    /* 桌面端布局优化 */
+    .header-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+  }
+  
+  /* 加载指示器 */
+  .loader {
+    display: none;
+    text-align: center;
+    padding: 20px;
+  }
+  
+  .loader .spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #2563eb;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  /* 状态提示 */
+  .status {
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin: 8px 0;
+    font-size: 14px;
+  }
+  
+  .status.success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+  
+  .status.error {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+</style>
+</head>
+<body>
+  <h2>房屋出租收费单 — 跨平台填写系统</h2>
+  <div class="muted">支持电脑和手机访问 / 本地保存 / GitHub 同步 / 导出 Excel & JPG</div>
+
+  <!-- 加载指示器 -->
+  <div class="loader" id="loader">
+    <div class="spinner"></div>
+    <div>处理中...</div>
+  </div>
+
+  <div class="card">
+    <div class="header-controls">
+      <div>
+        <div class="flex">
+          <div style="flex: 1;">
+            <label>客户</label>
+            <select id="customerSelect"></select>
+          </div>
+          <div style="flex: 1;">
+            <label>年-月</label>
+            <input id="yearmonth" type="month" min="2023-01" max="2026-12" />
+          </div>
+        </div>
+        
+        <div style="margin-top: 12px;">
+          <label>操作</label>
+          <div class="controls">
+            <button class="btn" id="btnNewMonth">新建/切换月份</button>
+            <button class="btn secondary" id="btnSave">保存本月</button>
+          </div>
+        </div>
+      </div>
+      
+      <div style="text-align: center; padding: 16px; background: #f8fafc; border-radius: 8px;">
+        <div class="muted">合计人民币</div>
+        <div id="totalRmb" style="font-size: 24px; font-weight: 600; color: #2563eb;">0元</div>
+      </div>
+    </div>
+    
+    <div style="margin-top: 12px;" class="button-group">
+      <button class="btn" id="btnExportXlsx">导出 Excel</button>
+      <button class="btn" id="btnExportJpg">导出 JPG</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+      <strong>项目填写区</strong>
+      <div class="muted" style="flex: 1;">输入本月表数 / 上月表数或直接编辑金额</div>
+      <div>
+        <button class="btn small" id="btnAddRow">新增行</button>
+        <button class="btn small secondary" id="btnResetTemplate">重置模板</button>
+      </div>
+    </div>
+    <div class="table-container">
+      <div id="tableContainer" class="table-preview"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="flex">
+      <div style="flex: 1;">
+        <strong>客户管理</strong>
+        <div style="margin-top: 8px;">
+          <input id="newCustomerName" placeholder="输入新客户名称" />
+          <div class="controls">
+            <button class="btn small" id="btnAddCustomer">新增客户</button>
+            <button class="btn small secondary" id="btnRemoveCustomer">删除客户</button>
+          </div>
+        </div>
+      </div>
+      
+      <div style="flex: 2;">
+        <strong>GitHub 同步</strong>
+        <div style="margin-top: 8px;">
+          <input id="ghToken" placeholder="GitHub Personal Access Token" type="password" />
+          <div class="flex">
+            <input id="ghOwner" placeholder="Owner" value="kwnewguy" />
+            <input id="ghRepo" placeholder="Repo" value="rent-management-data" />
+          </div>
+          <input id="ghPath" placeholder="文件路径" value="rent-data.json" />
+          
+          <div class="controls">
+            <button class="btn small" id="btnGhUpload">上传到 GitHub</button>
+            <button class="btn small" id="btnGhDownload">从 GitHub 加载</button>
+            <button class="btn small secondary" id="btnExportJson">导出 JSON</button>
+            <button class="btn small" id="btnImportJson">导入 JSON</button>
+            <input type="file" id="fileInput" accept=".json" style="display:none" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导出时构造此区域（临时显示），用于生成图片 -->
+  <div id="printArea" style="display:none; width:1920px; height:1440px; background:#ffffff; box-sizing:border-box; padding:40px;"></div>
+
+<script>
+// ================== 常用工具与规则 ==================
+const DB_KEY = 'rent_charges_db_responsive_v1'
+const GH_TOKEN_KEY = 'rent_charges_gh_token'
+
+// 显示/隐藏加载指示器
+function showLoader() {
+    document.getElementById('loader').style.display = 'block';
+}
+
+function hideLoader() {
+    document.getElementById('loader').style.display = 'none';
+}
+
+function loadDB(){ try{ return JSON.parse(localStorage.getItem(DB_KEY)) || {customers:{}, records:{}} }catch(e){ return {customers:{}, records:{}} } }
+function saveDB(db){ localStorage.setItem(DB_KEY, JSON.stringify(db)) }
+function saveGhToken(t){ if(t) localStorage.setItem(GH_TOKEN_KEY, t); else localStorage.removeItem(GH_TOKEN_KEY) }
+function loadGhToken(){ return localStorage.getItem(GH_TOKEN_KEY) || '' }
+function toNumberOrNaN(v){ if(v==null||v==='') return NaN; const n = Number(String(v).replace(/[^\d.-]/g,'')); return isFinite(n)?n:NaN }
+function integerPart(v){ 
+    if(isNaN(Number(v))) return 0
+    return v>=0? Math.trunc(v) : Math.trunc(v)
+}
+function moneyIntStr(v){ return String(integerPart(Math.floor(Number(v)||0))) }
+function formatYMD(date){ const y=date.getFullYear(); const m=String(date.getMonth()+1).padStart(2,'0'); const d=String(date.getDate()).padStart(2,'0'); return `${y}年${m}月${d}日` }
+function prevMonth(ym){ const [y,m] = ym.split('-').map(Number); let y2=y, m2=m-1; if(m2<1){ y2=y-1; m2=12 } return `${String(y2).padStart(4,'0')}-${String(m2).padStart(2,'0')}` }
+
+/* 将金额拆位（用于显示各位） */
+function splitIntegerToCols(amount){
+    const n = Math.abs(Math.trunc(Number(amount)||0))
+    let s = String(n)
+    if(s.length>6) s = s.slice(-6)
+    s = s.padStart(6,'0')
+    return [s[0], s[1], s[2], s[3], s[4], s[5]]
+}
+
+/* ================== 默认模板与初始化 ================== */
+const defaultTemplates = {
+    "蔡先生(1楼)": [
+        { id:'rent', name:'房租', type:'fixed', fixedAmount:4500, unitPrice:0 },
+        { id:'elec_1f', name:'1楼电费', type:'usage', cur:'', prev:'', unitPrice:0.9 }
+    ],
+    "梁先生(1楼)": [
+        { id:'rent', name:'房租', type:'fixed', fixedAmount:1800, unitPrice:0 },
+        { id:'elec_1f', name:'1楼电费', type:'usage', cur:'', prev:'', unitPrice:0.9 }
+    ],
+    "芊成公司(2/3/5楼)": [
+        { id:'rent', name:'房租', type:'fixed', fixedAmount:11000, unitPrice:0 },
+        { id:'elevator', name:'电梯公摊', type:'fixed', fixedAmount:540, unitPrice:0 },
+        { id:'2F_elec', name:'二楼宿舍电费', type:'usage', cur:'', prev:'', unitPrice:0.9 },
+        { id:'3F_elec', name:'三楼电费', type:'usage', cur:'', prev:'', unitPrice:0.9 },
+        { id:'5F_elec', name:'五楼宿舍电费', type:'usage', cur:'', prev:'', unitPrice:0.9 },
+        { id:'2F_water', name:'二楼车间水费', type:'usage', cur:'', prev:'', unitPrice:6 },
+        { id:'3F_water', name:'三楼车间水费', type:'usage', cur:'', prev:'', unitPrice:6 },
+        { id:'5F_office_water', name:'五楼办公水费', type:'usage', cur:'', prev:'', unitPrice:6 }
+    ],
+    "蔡凯先生(4楼)": [
+        { id:'rent', name:'房租', type:'fixed', fixedAmount:3600, unitPrice:0 },
+        { id:'elevator', name:'电梯公摊', type:'fixed', fixedAmount:180, unitPrice:0 },
+        { id:'4F_elec', name:'4楼电费', type:'usage', cur:'', prev:'', unitPrice:0.9 }
+    ],
+    "徐先生(5楼)": [
+        { id:'rent', name:'房租', type:'fixed', fixedAmount:5300, unitPrice:0 },
+        { id:'elevator', name:'电梯公摊', type:'fixed', fixedAmount:270, unitPrice:0 },
+        { id:'5F_elec', name:'五楼电费', type:'usage', cur:'', prev:'', unitPrice:0.9 },
+        { id:'5F_water', name:'五楼水费', type:'usage', cur:'', prev:'', unitPrice:6 }
+    ],
+    "李生(6楼)": [
+        { id:'rent', name:'房租', type:'fixed', fixedAmount:4300, unitPrice:0 },
+        { id:'elevator', name:'电梯公摊', type:'fixed', fixedAmount:270, unitPrice:0 },
+        { id:'office_elec', name:'办公楼电费', type:'usage', cur:'', prev:'', unitPrice:0.9 },
+        { id:'dorm_elec', name:'宿舍楼电费', type:'usage', cur:'', prev:'', unitPrice:0.9 }
+    ]
+}
+
+let db = loadDB()
+if(!db.customers || Object.keys(db.customers).length===0){
+    db = { customers:{}, records:{} }
+    for(const k of Object.keys(defaultTemplates)) db.customers[k] = { template: JSON.parse(JSON.stringify(defaultTemplates[k])) }
+    saveDB(db)
+}
+
+/* ================== UI 元素 ================== */
+const customerSelect = document.getElementById('customerSelect')
+const yearmonthInput = document.getElementById('yearmonth')
+const tableContainer = document.getElementById('tableContainer')
+const totalRmb = document.getElementById('totalRmb')
+const btnAddRow = document.getElementById('btnAddRow')
+const btnSave = document.getElementById('btnSave')
+const btnNewMonth = document.getElementById('btnNewMonth')
+const btnExportXlsx = document.getElementById('btnExportXlsx')
+const btnExportJpg = document.getElementById('btnExportJpg')
+const btnAddCustomer = document.getElementById('btnAddCustomer')
+const btnRemoveCustomer = document.getElementById('btnRemoveCustomer')
+const newCustomerName = document.getElementById('newCustomerName')
+const btnResetTemplate = document.getElementById('btnResetTemplate')
+const ghTokenInput = document.getElementById('ghToken')
+const ghOwnerInput = document.getElementById('ghOwner')
+const ghRepoInput = document.getElementById('ghRepo')
+const ghPathInput = document.getElementById('ghPath')
+const btnGhUpload = document.getElementById('btnGhUpload')
+const btnGhDownload = document.getElementById('btnGhDownload')
+const btnExportJson = document.getElementById('btnExportJson')
+const btnImportJson = document.getElementById('btnImportJson')
+const fileInput = document.getElementById('fileInput')
+const printArea = document.getElementById('printArea')
+
+/* 填默认 GitHub 配置 */
+ghOwnerInput.value = 'kwnewguy'
+ghRepoInput.value = 'rent-management-data'
+ghPathInput.value = 'rent-data.json'
+ghTokenInput.value = loadGhToken()
+
+/* 刷新客户列表 */
+function refreshCustomerList(){
+    customerSelect.innerHTML = ''
+    Object.keys(db.customers).forEach(k=>{
+        const opt = document.createElement('option'); opt.value=k; opt.textContent=k; customerSelect.appendChild(opt)
+    })
+}
+refreshCustomerList()
+
+/* 默认月份：自动跳转到当前月表单 */
+const now = new Date()
+yearmonthInput.value = now.toISOString().slice(0,7)
+
+/* 构建表格 */
+function monthKey(customer, ym){ return customer + '::' + ym }
+function buildTable(){
+    const customer = customerSelect.value; const ym = yearmonthInput.value
+    if(!customer || !ym){ tableContainer.innerHTML = '<div class="muted">请选择客户与月份</div>'; return }
+    const tpl = JSON.parse(JSON.stringify(db.customers[customer].template || []))
+    const saved = db.records[monthKey(customer, ym)]
+    if(saved && saved.items){
+        tpl.forEach((t,i)=>{
+            const s = saved.items.find(it=>it.id===t.id) || saved.items[i]
+            if(s){
+                if(t.type==='usage'){ t.cur = s.cur; t.prev = s.prev }
+                if(t.type==='fixed'){ t.fixedAmount = (s.fixedAmount!=null)?s.fixedAmount:t.fixedAmount }
+                if(s.unitPrice!=null) t.unitPrice = s.unitPrice
+            }
+        })
+    } else {
+        // 自动从上月读取本月(cur) -> 作为本月(prev)
+        const last = prevMonth(ym)
+        const lastSaved = db.records[monthKey(customer, last)]
+        if(lastSaved && lastSaved.items){
+            tpl.forEach((t,i)=>{
+                const s = lastSaved.items.find(it=>it.id===t.id) || lastSaved.items[i]
+                if(s && t.type==='usage' && s.cur!=null) t.prev = s.cur
+            })
+        }
+    }
+    renderTable(tpl)
+}
+
+/* 渲染编辑表格（响应式优化） */
+function renderTable(template){
+    const wrap = document.createElement('div')
+    let html = `
+    <table style="width:100%;border-collapse:collapse; font-size:14px;">
+        <thead>
+            <tr style="background:#f8fafc">
+                <th style="padding:10px 6px; min-width:50px;">序号</th>
+                <th style="padding:10px 6px; min-width:120px;">项目</th>
+                <th style="padding:10px 6px; min-width:100px;">本月表数</th>
+                <th style="padding:10px 6px; min-width:100px;">上月表数</th>
+                <th style="padding:10px 6px; min-width:80px;">实用</th>
+                <th style="padding:10px 6px; min-width:90px;">单价(元)</th>
+                <th style="padding:10px 6px; min-width:100px;">金额(元)</th>
+                <th style="padding:10px 6px; min-width:140px;">操作</th>
+            </tr>
+        </thead>
+        <tbody id="tblBody">`
+    
+    template.forEach((row,i)=>{
+        const cur=row.cur!=null?row.cur:''; const prev=row.prev!=null?row.prev:''; const up=row.unitPrice!=null?row.unitPrice:''; const fa=row.fixedAmount!=null?row.fixedAmount:''
+        html += `<tr data-i="${i}">
+            <td style="padding:8px 6px">${i+1}</td>
+            <td style="padding:8px 6px"><input data-field="name" value="${escapeHtml(row.name||'')}" style="width:100%; min-width:100px;" placeholder="项目名称"/></td>
+            <td style="padding:8px 6px"><input data-field="cur" value="${cur}" class="numeric" placeholder="0" /></td>
+            <td style="padding:8px 6px"><input data-field="prev" value="${prev}" class="numeric" placeholder="0" /></td>
+            <td style="padding:8px 6px"><input data-field="usage" readonly class="numeric" /></td>
+            <td style="padding:8px 6px"><input data-field="unitPrice" value="${up}" class="numeric" placeholder="0.00" /></td>
+            <td style="padding:8px 6px"><input data-field="amount" readonly class="numeric" value="${ row.type==='fixed' ? integerPart(row.fixedAmount||0) : '' }" /></td>
+            <td style="padding:8px 6px">
+                <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                    <button class="btn small removeRow" style="padding: 6px 8px; font-size: 12px;">删除</button>
+                    <button class="btn small secondary toggleType" style="padding: 6px 8px; font-size: 12px;">${ row.type==='fixed' ? '固定' : '计用量' }</button>
+                </div>
+            </td>
+        </tr>`
+    })
+    html += '</tbody></table>'
+    wrap.innerHTML = html
+    tableContainer.innerHTML = ''; tableContainer.appendChild(wrap)
+
+    const tbody = tableContainer.querySelector('#tblBody')
+    function updateRow(tr){
+        const i = parseInt(tr.getAttribute('data-i'))
+        const curVal = tr.querySelector('[data-field=cur]').value
+        const prevVal = tr.querySelector('[data-field=prev]').value
+        const upVal = tr.querySelector('[data-field=unitPrice]').value
+        const cur = toNumberOrNaN(curVal), prev = toNumberOrNaN(prevVal), up = toNumberOrNaN(upVal)
+        const tplRow = db.customers[customerSelect.value].template[i]
+        const usageField = tr.querySelector('[data-field=usage]')
+        const amountField = tr.querySelector('[data-field=amount]')
+        // if template marks fixed type
+        if(tplRow && tplRow.type === 'fixed'){
+            // allow editing fixed amount by editing amountField directly
+            const fixedVal = toNumberOrNaN(amountField.value)
+            if(!isNaN(fixedVal)) amountField.value = integerPart(fixedVal)
+            usageField.value = ''
+        } else {
+            // usage calculation if both numbers present
+            if(!isNaN(cur) && !isNaN(prev)){ const usage = cur - prev; usageField.value = integerPart(usage) } else usageField.value = ''
+            const usageNum = toNumberOrNaN(usageField.value)
+            if(!isNaN(usageNum) && !isNaN(up)){ const amt = usageNum * up; amountField.value = integerPart(Math.floor(amt)) } else amountField.value = ''
+        }
+        calcTotal()
+    }
+    // initial update
+    tbody.querySelectorAll('tr').forEach(tr=> updateRow(tr))
+    tbody.addEventListener('input', (e)=>{
+        const tr = e.target.closest('tr'); if(!tr) return; updateRow(tr)
+    })
+    tbody.addEventListener('click', (e)=>{
+        if(e.target.classList.contains('removeRow')){
+            const tr = e.target.closest('tr'); 
+            if(confirm('确定要删除这一行吗？')) {
+                tr.remove(); 
+                tbody.querySelectorAll('tr').forEach((r,idx)=> {
+                    r.setAttribute('data-i', idx);
+                    r.cells[0].textContent = idx+1
+                }); 
+                calcTotal()
+            }
+        }
+        if(e.target.classList.contains('toggleType')){
+            const tr = e.target.closest('tr'); const idx = parseInt(tr.getAttribute('data-i'))
+            const customer = customerSelect.value
+            if(!db.customers[customer] || !db.customers[customer].template) return
+            const t = db.customers[customer].template[idx]
+            if(!t) return
+            if(t.type === 'fixed'){ t.type='usage'; delete t.fixedAmount; t.cur=''; t.prev=''; t.unitPrice = t.unitPrice || 0.9 }
+            else { t.type='fixed'; t.fixedAmount = t.fixedAmount || 0; delete t.cur; delete t.prev; t.unitPrice = t.unitPrice || 0 }
+            saveDB(db); buildTable()
+        }
+    })
+}
+
+/* 计算合计（即时显示） */
+function calcTotal(){
+    const trs = tableContainer.querySelectorAll('tbody tr')
+    let total = 0
+    trs.forEach(tr=>{
+        const amt = toNumberOrNaN(tr.querySelector('[data-field=amount]').value)
+        if(!isNaN(amt) && amt>0) total += integerPart(amt)
+    })
+    totalRmb.textContent = `${total}元`
+    return total
+}
+
+/* 读取 UI 为 items（保存用） */
+function readItemsFromUI(){
+    const rows = tableContainer.querySelectorAll('tbody tr')
+    const items = []
+    rows.forEach((tr,idx)=>{
+        const name = tr.querySelector('[data-field=name]').value
+        const cur = tr.querySelector('[data-field=cur]').value
+        const prev = tr.querySelector('[data-field=prev]').value
+        const unitPrice = toNumberOrNaN(tr.querySelector('[data-field=unitPrice]').value)
+        const amount = toNumberOrNaN(tr.querySelector('[data-field=amount]').value)
+        // determine type by template if exists
+        const customer = customerSelect.value
+        const tpl = db.customers[customer] && db.customers[customer].template[idx]
+        if(tpl && tpl.type === 'fixed'){
+            items.push({ id: tpl.id||('r'+idx), name, type:'fixed', fixedAmount: integerPart(amount || tpl.fixedAmount || 0), unitPrice: isNaN(unitPrice)?0:unitPrice })
+        } else {
+            items.push({ id: tpl?tpl.id:('r'+idx), name, type:'usage', cur: cur||'', prev: prev||'', unitPrice: isNaN(unitPrice)?0:unitPrice, amount: isNaN(amount)?null:integerPart(amount) })
+        }
+    })
+    return items
+}
+
+/* 保存当前月数据 */
+btnSave.addEventListener('click', ()=>{
+    const customer = customerSelect.value, ym = yearmonthInput.value
+    if(!customer || !ym) return alert('请选择客户与月份')
+    const key = monthKey(customer, ym)
+    const items = readItemsFromUI()
+    db.records[key] = { meta:{ savedAt: new Date().toISOString() }, items }
+    // update template skeleton: keep names, types, unitPrices, fixed flags
+    db.customers[customer].template = getTemplateFromUI()
+    saveDB(db)
+    alert('✅ 已保存本月数据（本地）')
+})
+
+/* get template skeleton from current UI (for persisting template) */
+function getTemplateFromUI(){
+    const rows = tableContainer.querySelectorAll('tbody tr')
+    const tpl = []
+    rows.forEach((tr,idx)=>{
+        const name = tr.querySelector('[data-field=name]').value
+        const cur = tr.querySelector('[data-field=cur]').value
+        const prev = tr.querySelector('[data-field=prev]').value
+        const unitPrice = toNumberOrNaN(tr.querySelector('[data-field=unitPrice]').value)
+        const amount = toNumberOrNaN(tr.querySelector('[data-field=amount]').value)
+        if((cur==='' && prev==='') && !isNaN(amount)){
+            tpl.push({ id:'r'+idx, name, type:'fixed', fixedAmount: integerPart(amount), unitPrice: isNaN(unitPrice)?0:unitPrice })
+        } else {
+            tpl.push({ id:'r'+idx, name, type:'usage', cur: cur||'', prev: prev||'', unitPrice: isNaN(unitPrice)?0:unitPrice })
+        }
+    })
+    return tpl
+}
+
+/* 新增 / 重置 / 客户管理 */
+btnAddRow.addEventListener('click', ()=>{
+    const c = customerSelect.value; if(!c) return alert('请选择客户')
+    const tpl = db.customers[c].template || []
+    tpl.push({ id:'r'+tpl.length, name:'新项目', type:'usage', cur:'', prev:'', unitPrice:0.9 })
+    db.customers[c].template = tpl; saveDB(db); buildTable()
+})
+btnResetTemplate.addEventListener('click', ()=>{
+    const c = customerSelect.value; if(!c) return alert('请选择客户')
+    if(!confirm('确认重置模板为默认？将覆盖当前客户模板')) return
+    if(defaultTemplates[c]) db.customers[c].template = JSON.parse(JSON.stringify(defaultTemplates[c]))
+    else db.customers[c].template = []
+    saveDB(db); buildTable()
+})
+document.getElementById('btnAddCustomer').addEventListener('click', ()=>{
+    const name = newCustomerName.value.trim(); if(!name) return alert('请输入客户名'); if(db.customers[name]) return alert('客户已存在')
+    db.customers[name] = { template: [] }; saveDB(db); refreshCustomerList(); customerSelect.value = name; buildTable()
+    newCustomerName.value = '';
+})
+document.getElementById('btnRemoveCustomer').addEventListener('click', ()=>{
+    const c = customerSelect.value; if(!c) return alert('请选择客户'); if(!confirm('确认删除客户及其所有本地记录？')) return
+    delete db.customers[c]; Object.keys(db.records).forEach(k=>{ if(k.startsWith(c+'::')) delete db.records[k] })
+    saveDB(db); refreshCustomerList(); buildTable()
+})
+
+/* GitHub helpers (client-side) — token stored in localStorage when user clicks Save Token */
+async function ghGetFileSha(owner, repo, path, token){
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
+    const resp = await fetch(url, { headers:{ Authorization: 'token '+token, Accept:'application/vnd.github.v3+json' }})
+    if(resp.status===200){ const j = await resp.json(); return j.sha }
+    if(resp.status===404) return null
+    throw new Error('GitHub API 错误: ' + resp.status)
+}
+async function ghUpload(owner, repo, path, token, contentStr, message='sync rent data'){
+    const sha = await ghGetFileSha(owner, repo, path, token)
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
+    const body = { message, content: btoa(unescape(encodeURIComponent(contentStr))) }
+    if(sha) body.sha = sha
+    const resp = await fetch(url, { method:'PUT', headers:{ Authorization: 'token '+token, Accept:'application/vnd.github.v3+json' }, body: JSON.stringify(body) })
+    if(!resp.ok) throw new Error('上传失败: '+resp.statusText)
+    return await resp.json()
+}
+async function ghDownload(owner, repo, path, token){
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
+    const resp = await fetch(url, { headers:{ Authorization: 'token '+token, Accept:'application/vnd.github.v3+json' }})
+    if(!resp.ok) throw new Error('下载失败: '+resp.statusText)
+    const j = await resp.json()
+    const content = decodeURIComponent(escape(atob(j.content.replace(/\n/g,''))))
+    return { content, sha: j.sha }
+}
+
+/* GitHub 操作绑定 */
+btnGhUpload.addEventListener('click', async ()=>{
+    const token = ghTokenInput.value.trim(); const owner = ghOwnerInput.value.trim(); const repo = ghRepoInput.value.trim(); const path = ghPathInput.value.trim()
+    if(!token||!owner||!repo||!path) return alert('请完整填写 GitHub 配置（含 Token）')
+    showLoader()
+    try{
+        saveGhToken(token)
+        const res = await ghUpload(owner, repo, path, token, JSON.stringify(db, null, 2), '同步 rent data')
+        alert('✅ 上传成功: '+(res.content && res.content.path))
+    }catch(err){ alert('❌ 上传失败: '+err.message) }
+    finally { hideLoader() }
+})
+btnGhDownload.addEventListener('click', async ()=>{
+    const token = ghTokenInput.value.trim(); const owner = ghOwnerInput.value.trim(); const repo = ghRepoInput.value.trim(); const path = ghPathInput.value.trim()
+    if(!token||!owner||!repo||!path) return alert('请完整填写 GitHub 配置（含 Token）')
+    showLoader()
+    try{
+        const res = await ghDownload(owner, repo, path, token)
+        const j = JSON.parse(res.content)
+        if(!j.customers || !j.records) return alert('GitHub 文件结构不正确')
+        db = j; saveDB(db); refreshCustomerList(); alert('✅ 下载并覆盖成功（本地数据已更新）'); buildTable()
+    }catch(err){ alert('❌ 下载失败: '+err.message) }
+    finally { hideLoader() }
+})
+
+/* 导入/导出 JSON（本地文件） */
+btnExportJson.addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(db, null, 2)], {type:'application/json'})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'rent-data-export.json'; a.click(); URL.revokeObjectURL(url)
+    alert('✅ JSON 导出成功')
+})
+btnImportJson.addEventListener('click', ()=> fileInput.click())
+fileInput.addEventListener('change', (e)=>{
+    const f = e.target.files[0]; if(!f) return
+    const reader = new FileReader()
+    reader.onload = function(){ try{ const j=JSON.parse(reader.result); if(!j.customers||!j.records) return alert('文件结构不正确'); db=j; saveDB(db); refreshCustomerList(); alert('✅ 导入完成'); buildTable() }catch(err){ alert('❌ 导入失败:'+err.message) } }
+    reader.readAsText(f)
+})
+
+/* Export Excel: integer yuan only, filter amount>0 */
+btnExportXlsx.addEventListener('click', ()=>{
+    const customer = customerSelect.value, ym = yearmonthInput.value
+    if(!customer||!ym) return alert('请选择客户与月份')
+    const rows = tableContainer.querySelectorAll('tbody tr')
+    const ws_data = []
+    ws_data.push(['序号','项目','本月表数','上月表数','实用','单价(元)','金额(元)'])
+    let cnt=0, total=0
+    rows.forEach(tr=>{
+        const name = tr.querySelector('[data-field=name]').value
+        const cur = tr.querySelector('[data-field=cur]').value
+        const prev = tr.querySelector('[data-field=prev]').value
+        const usage = tr.querySelector('[data-field=usage]').value
+        const unitPrice = tr.querySelector('[data-field=unitPrice]').value
+        const amount = toNumberOrNaN(tr.querySelector('[data-field=amount]').value)
+        if(isNaN(amount) || amount<=0) return
+        cnt++ ; total += integerPart(amount)
+        ws_data.push([cnt, name, cur, prev, usage, unitPrice, integerPart(amount)])
+    })
+    if(cnt===0) return alert('没有可导出的金额行')
+    ws_data.push([]); ws_data.push(['合计人民币', `${total}元`])
+    const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(ws_data); XLSX.utils.book_append_sheet(wb, ws, `${customer}-${ym}`)
+    const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'}); const blob = new Blob([wbout], {type:'application/octet-stream'})
+    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${customer}-${ym}.xlsx`; a.click(); URL.revokeObjectURL(url)
+})
+
+/* Export JPG 1920x1440 (4:3): build template HTML, filter rows with amount<=0 */
+btnExportJpg.addEventListener('click', async ()=>{
+    const customer = customerSelect.value, ym = yearmonthInput.value
+    if(!customer||!ym) return alert('请选择客户与月份')
+    const rows = tableContainer.querySelectorAll('tbody tr')
+    const items = []
+    let total = 0
+    rows.forEach((tr,idx)=>{
+        const name = tr.querySelector('[data-field=name]').value
+        const cur = tr.querySelector('[data-field=cur]').value
+        const prev = tr.querySelector('[data-field=prev]').value
+        const usage = tr.querySelector('[data-field=usage]').value
+        const unitPrice = tr.querySelector('[data-field=unitPrice]').value
+        const amount = toNumberOrNaN(tr.querySelector('[data-field=amount]').value)
+        if(isNaN(amount) || amount<=0) return
+        const intAmt = integerPart(amount)
+        total += intAmt
+        items.push({ name, cur, prev, usage, unitPrice, amount: intAmt })
+    })
+    if(items.length===0) return alert('没有可导出的金额行')
+    const html = buildExportTemplateHtml(customer, items, total)
+    // put into printArea sized 1920x1440 (4:3 ratio)
+    printArea.innerHTML = html
+    printArea.style.display = 'block'
+    // set to 4:3 aspect ratio
+    printArea.style.width = '1920px'; printArea.style.height = '1440px'; printArea.style.padding = '20px'; printArea.style.boxSizing='border-box'
+    showLoader()
+    try{
+        const canvas = await html2canvas(printArea, { scale:1, useCORS:true, backgroundColor: '#ffffff' })
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95)
+        const a = document.createElement('a'); a.href = dataUrl; a.download = `${customer}-${(new Date()).toISOString().slice(0,10)}.jpg`; a.click()
+    }catch(err){
+        alert('❌ 导出 JPG 失败: '+err.message)
+    } finally {
+        printArea.style.display = 'none'; printArea.innerHTML = ''
+        hideLoader()
+    }
+})
+
+/* 构造导出 HTML（自适应 4:3 比例，直接显示金额，去掉分列） */
+function buildExportTemplateHtml(customer, items, total){
+    // build rows
+    let rowsHtml = ''
+    items.forEach((it, idx)=>{
+        rowsHtml += `<tr>
+            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${idx+1}</td>
+            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(it.name)}</td>
+            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(it.cur)}</td>
+            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(it.prev)}</td>
+            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(it.usage)}</td>
+            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(it.unitPrice)}</td>
+            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(String(it.amount))}</td>
+        </tr>`
+    })
+    
+    const todayStr = formatYMD(new Date())
+    
+    // HTML structure for 4:3 aspect ratio with larger fonts and better spacing
+    return `
+    <div class="export-template" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#ffffff">
+    <table class="tg" style="table-layout: fixed; width: 90%; height: 85%; font-size:28px; border: 2px solid #000;">
+    <colgroup>
+        <col style="width: 8%">
+        <col style="width: 22%">
+        <col style="width: 12%">
+        <col style="width: 12%">
+        <col style="width: 10%">
+        <col style="width: 12%">
+        <col style="width: 12%">
+    </colgroup>
+    <thead>
+        <tr>
+            <th class="tg-rzxb" colspan="7" style="font-size:36px;padding:25px 20px;border-bottom:2px solid #000;">房屋出租收费单</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="tg-gqad" colspan="2" style="font-size:28px;padding:20px 15px;border-bottom:1px solid #000;">客户：</td>
+            <td class="tg-gqad" colspan="5" style="font-size:28px;padding:20px 15px;border-bottom:1px solid #000;">${escapeHtml(customer)}</td>
+        </tr>
+        <tr style="background:#f8f9fa">
+            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">序号</td>
+            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">项目</td>
+            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">本月表数</td>
+            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">上月表数</td>
+            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">实用</td>
+            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">单价(元)</td>
+            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">金额(元)</td>
+        </tr>
+        ${rowsHtml}
+        <tr>
+            <td class="tg-gqad" colspan="2" style="font-size:28px;padding:20px 15px;border-top:2px solid #000;">合计人民币</td>
+            <td class="tg-gqad" colspan="5" style="font-size:28px;padding:20px 15px;border-top:2px solid #000;">${integerPart(total)}元</td>
+        </tr>
+        <tr>
+            <td class="tg-gqad" colspan="2" style="font-size:26px;padding:18px 12px;">日期：</td>
+            <td class="tg-gqad" colspan="2" style="font-size:26px;padding:18px 12px;">${escapeHtml(todayStr)}</td>
+            <td class="tg-gqad" colspan="3" style="font-size:26px;padding:18px 12px;">填写人：羊</td>
+        </tr>
+    </tbody>
+    </table>
+    </div>`
+}
+
+/* 事件：切换月份/客户 */
+btnNewMonth.addEventListener('click', buildTable)
+customerSelect.addEventListener('change', buildTable)
+yearmonthInput.addEventListener('change', buildTable)
+
+/* 自动加载当前月表单（页面打开自动切换到当前月） */
+window.addEventListener('load', ()=> {
+    // set default customer selection to first
+    if(customerSelect.options.length>0) customerSelect.selectedIndex = 0
+    // ensure yearmonth is current month
+    yearmonthInput.value = new Date().toISOString().slice(0,7)
+    buildTable()
+    // load saved token if any into input
+    const savedToken = loadGhToken()
+    if(savedToken) ghTokenInput.value = savedToken
+})
+
+/* 辅助 */
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;') }
+
+// 检测设备类型
+function detectDevice() {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+        document.body.classList.add('mobile-device');
+    } else {
+        document.body.classList.add('desktop-device');
+    }
+}
+
+// 初始化设备检测
+detectDevice();
+
+/* 结束 */
+</script>
+
+</body>
+</html>
