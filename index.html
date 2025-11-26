@@ -344,6 +344,14 @@
             <input id="yearmonth" type="month" min="2023-01" max="2026-12" />
           </div>
         </div>
+
+      <!-- 月份快速导航 -->
+      <div style="display: flex; gap: 8px; align-items: center; margin-top: 12px;">
+        <button class="btn small" id="btnPrevMonth">← 上月</button>
+        <span style="font-weight: 500; flex: 1; text-align: center;" id="currentMonthDisplay"></span>
+        <button class="btn small" id="btnNextMonth">下月 →</button>
+        <span style="color: #666; font-size: 13px; min-width: 80px; text-align: right;" id="monthStatus"></span>
+      </div>
         
         <div style="margin-top: 12px;">
           <label>操作</label>
@@ -444,6 +452,7 @@ function integerPart(v){
 function moneyIntStr(v){ return String(integerPart(Math.floor(Number(v)||0))) }
 function formatYMD(date){ const y=date.getFullYear(); const m=String(date.getMonth()+1).padStart(2,'0'); const d=String(date.getDate()).padStart(2,'0'); return `${y}年${m}月${d}日` }
 function prevMonth(ym){ const [y,m] = ym.split('-').map(Number); let y2=y, m2=m-1; if(m2<1){ y2=y-1; m2=12 } return `${String(y2).padStart(4,'0')}-${String(m2).padStart(2,'0')}` }
+function monthKey(customer, ym){ return customer + '::' + ym }
 
 /* 将金额拆位（用于显示各位） */
 function splitIntegerToCols(amount){
@@ -452,6 +461,179 @@ function splitIntegerToCols(amount){
     if(s.length>6) s = s.slice(-6)
     s = s.padStart(6,'0')
     return [s[0], s[1], s[2], s[3], s[4], s[5]]
+}
+
+// ================== 智能数据继承相关函数 ==================
+function nextMonth(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  let y2 = y, m2 = m + 1;
+  if (m2 > 12) { y2 = y + 1; m2 = 1 }
+  return `${String(y2).padStart(4, '0')}-${String(m2).padStart(2, '0')}`;
+}
+
+/* 修复智能数据继承 */
+function inheritDataIntelligently(template, lastMonthItems, currentMonth, lastMonth) {
+  console.log(`🔄 执行智能继承: 从 ${lastMonth} 到 ${currentMonth}`);
+  console.log('📋 上月数据:', lastMonthItems);
+  console.log('📋 模板数据:', template);
+  
+  return template.map(templateItem => {
+    // 改进匹配逻辑：优先使用id匹配，然后使用name匹配
+    let lastItem = lastMonthItems.find(item => item.id === templateItem.id);
+    if (!lastItem) {
+      lastItem = lastMonthItems.find(item => item.name === templateItem.name);
+    }
+
+    if (!lastItem) {
+      console.log(`❌ 项目 ${templateItem.name} 在上月数据中未找到，使用模板`);
+      return templateItem;
+    }
+
+    // 深拷贝模板项目
+    const newItem = JSON.parse(JSON.stringify(templateItem));
+    
+    if (templateItem.type === 'usage') {
+      // 用量项目：继承上月"本月表数"作为本月"上月表数"
+      newItem.prev = lastItem.cur || lastItem.prev || '';
+      newItem.cur = ''; // 本月表数清空
+      newItem.unitPrice = lastItem.unitPrice || templateItem.unitPrice;
+      
+      console.log(`✅ 用量项目 ${templateItem.name}: 上月表数=${lastItem.cur} → 本月上月表数=${newItem.prev}`);
+    } else {
+      // 固定项目：直接继承金额与单价
+      newItem.fixedAmount = lastItem.fixedAmount || templateItem.fixedAmount;
+      newItem.unitPrice = lastItem.unitPrice || templateItem.unitPrice;
+      console.log(`✅ 固定项目 ${templateItem.name}: 继承金额=${newItem.fixedAmount}`);
+    }
+    
+    return newItem;
+  });
+}
+
+/* 修复智能加载月份数据 */
+function loadMonthData(customer, ym) {
+  const key = monthKey(customer, ym);
+  
+  console.log(`🔍 加载月份数据: ${key}`);
+  
+  // 1. 如果该月份已有保存数据，检查是否真的有有效数据
+  if (db.records[key]) {
+    const existingItems = db.records[key].items || [];
+    
+    // 更严格的检查：是否有任何项目包含真实数据
+    const hasRealData = existingItems.some(item => {
+      if (item.type === 'usage') {
+        return item.cur !== '' || item.prev !== '';
+      } else {
+        return item.fixedAmount > 0;
+      }
+    });
+    
+    if (hasRealData) {
+      console.log(`✅ 加载 ${ym} 月已保存数据（有真实数据）`);
+      return existingItems;
+    } else {
+      console.log(`🔄 检测到 ${ym} 月数据为空，将尝试从上月继承`);
+      // 删除这个空记录，让智能继承逻辑可以执行
+      delete db.records[key];
+      saveDB(db);
+    }
+  }
+
+  // 2. 新月份或空数据月份：智能继承
+  const template = JSON.parse(JSON.stringify(db.customers[customer]?.template || []));
+  const lastMonth = prevMonth(ym);
+  const lastMonthKey = monthKey(customer, lastMonth);
+  const lastMonthData = db.records[lastMonthKey];
+  
+  if (lastMonthData && lastMonthData.items && lastMonthData.items.length > 0) {
+    console.log(`🔄 从 ${lastMonth} 月智能继承数据到 ${ym} 月`);
+    const inheritedData = inheritDataIntelligently(template, lastMonthData.items, ym, lastMonth);
+    console.log('📊 继承后的数据:', inheritedData);
+    return inheritedData;
+  }
+
+  // 3. 全新月份，使用模板
+  console.log(`🆕 全新月份 ${ym}，使用模板`);
+  return template;
+}
+
+/* 修复检查数据是否有实际修改 */
+function hasDataChanges(items) {
+  return items.some(item => {
+    if (item.type === 'usage') {
+      // 用量项目：检查是否有表数数据
+      return item.cur !== '' || item.prev !== '';
+    } else {
+      // 固定项目：检查是否有金额
+      return item.fixedAmount > 0;
+    }
+  });
+}
+
+/* 数据验证 */
+function validateMonthData(items, month) {
+  const errors = [];
+  
+  items.forEach((item, index) => {
+    if (item.type === 'usage') {
+      if (!item.cur && !item.prev) {
+        // 全新月份，两个都为空是正常的
+        return;
+      }
+      
+      if (!item.cur && item.prev) {
+        errors.push(`• ${item.name}: 请填写"本月表数"`);
+      }
+      
+      if (item.cur && !item.prev) {
+        errors.push(`• ${item.name}: 请填写"上月表数"`);
+      }
+      
+      if (item.cur && item.prev) {
+        const curNum = toNumberOrNaN(item.cur);
+        const prevNum = toNumberOrNaN(item.prev);
+        
+        if (curNum < prevNum) {
+          errors.push(`• ${item.name}: 本月表数不能小于上月表数`);
+        }
+      }
+    }
+  });
+  
+  return {
+    isValid: errors.length === 0,
+    errors: errors
+  };
+}
+
+/* 显示Toast提示 */
+function showToast(message, type = 'info', duration = 3000) {
+  // 移除现有的toast
+  const existingToast = document.getElementById('globalToast');
+  if (existingToast) existingToast.remove();
+  
+  const toast = document.createElement('div');
+  toast.id = 'globalToast';
+  toast.innerHTML = `
+    <div style="
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+      color: white; padding: 12px 20px; border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 10000;
+      max-width: 400px; text-align: center; font-size: 14px;
+    ">
+      ${message}
+    </div>
+  `;
+  
+  document.body.appendChild(toast);
+  
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.parentNode.removeChild(toast);
+    }
+  }, duration);
 }
 
 /* ================== 默认模板与初始化 ================== */
@@ -544,38 +726,50 @@ refreshCustomerList()
 const now = new Date()
 yearmonthInput.value = now.toISOString().slice(0,7)
 
-/* 构建表格 */
-function monthKey(customer, ym){ return customer + '::' + ym }
-function buildTable(){
-    const customer = customerSelect.value; const ym = yearmonthInput.value
-    if(!customer || !ym){ tableContainer.innerHTML = '<div class="muted">请选择客户与月份</div>'; return }
-    const tpl = JSON.parse(JSON.stringify(db.customers[customer].template || []))
-    const saved = db.records[monthKey(customer, ym)]
-    if(saved && saved.items){
-        tpl.forEach((t,i)=>{
-            const s = saved.items.find(it=>it.id===t.id) || saved.items[i]
-            if(s){
-                if(t.type==='usage'){ t.cur = s.cur; t.prev = s.prev }
-                if(t.type==='fixed'){ t.fixedAmount = (s.fixedAmount!=null)?s.fixedAmount:t.fixedAmount }
-                if(s.unitPrice!=null) t.unitPrice = s.unitPrice
-            }
-        })
-    } else {
-        // 自动从上月读取本月(cur) -> 作为本月(prev)
-        const last = prevMonth(ym)
-        const lastSaved = db.records[monthKey(customer, last)]
-        if(lastSaved && lastSaved.items){
-            tpl.forEach((t,i)=>{
-                const s = lastSaved.items.find(it=>it.id===t.id) || lastSaved.items[i]
-                if(s && t.type==='usage' && s.cur!=null) t.prev = s.cur
-            })
-        }
-    }
-    renderTable(tpl)
+/* 构建表格 - 使用智能数据加载 */
+function buildTable() {
+  const customer = customerSelect.value;
+  const ym = yearmonthInput.value;
+  
+  if (!customer || !ym) {
+    tableContainer.innerHTML = '<div class="muted">请选择客户与月份</div>';
+    return;
+  }
+  
+  // 使用新的智能数据加载
+  const tableData = loadMonthData(customer, ym);
+  renderTable(tableData);
+  
+  // 更新月份状态显示
+  updateMonthStatus(customer, ym);
 }
 
-/* 渲染编辑表格（响应式优化） */
+/* 更新月份状态显示 */
+function updateMonthStatus(customer, ym) {
+  const statusEl = document.getElementById('monthStatus');
+  if (!statusEl) return;
+  
+  const key = monthKey(customer, ym);
+  const hasData = db.records[key];
+  const lastMonth = prevMonth(ym);
+  const hasLastMonth = db.records[monthKey(customer, lastMonth)];
+  
+  let status = '';
+  if (hasData) {
+    status = '📁 已保存';
+  } else if (hasLastMonth) {
+    status = '🔄 从上月继承';
+  } else {
+    status = '🆕 新月份';
+  }
+  
+  statusEl.textContent = status;
+}
+
+/* 修复渲染编辑表格 */
 function renderTable(template){
+    console.log('🎨 渲染表格，数据:', template);
+    
     const wrap = document.createElement('div')
     let html = `
     <table style="width:100%;border-collapse:collapse; font-size:14px;">
@@ -593,28 +787,35 @@ function renderTable(template){
         </thead>
         <tbody id="tblBody">`
     
-    template.forEach((row,i)=>{
-        const cur=row.cur!=null?row.cur:''; const prev=row.prev!=null?row.prev:''; const up=row.unitPrice!=null?row.unitPrice:''; const fa=row.fixedAmount!=null?row.fixedAmount:''
-        html += `<tr data-i="${i}">
-            <td style="padding:8px 6px">${i+1}</td>
-            <td style="padding:8px 6px"><input data-field="name" value="${escapeHtml(row.name||'')}" style="width:100%; min-width:100px;" placeholder="项目名称"/></td>
+    template.forEach((row, i) => {
+        const cur = row.cur ?? '';
+        const prev = row.prev ?? '';
+        const up = row.unitPrice ?? '';
+        const fa = row.fixedAmount ?? '';
+
+        html += `<tr data-i="${i}" data-id="${row.id || 'r'+i}">
+            <td style="padding:8px 6px">${i + 1}</td>
+            <td style="padding:8px 6px"><input data-field="name" value="${escapeHtml(row.name || '')}" style="width:100%; min-width:100px;" placeholder="项目名称"/></td>
             <td style="padding:8px 6px"><input data-field="cur" value="${cur}" class="numeric" placeholder="0" /></td>
             <td style="padding:8px 6px"><input data-field="prev" value="${prev}" class="numeric" placeholder="0" /></td>
             <td style="padding:8px 6px"><input data-field="usage" readonly class="numeric" /></td>
             <td style="padding:8px 6px"><input data-field="unitPrice" value="${up}" class="numeric" placeholder="0.00" /></td>
-            <td style="padding:8px 6px"><input data-field="amount" readonly class="numeric" value="${ row.type==='fixed' ? integerPart(row.fixedAmount||0) : '' }" /></td>
+            <td style="padding:8px 6px"><input data-field="amount" readonly class="numeric" value="${row.type === 'fixed' ? integerPart(row.fixedAmount || 0) : ''}" /></td>
             <td style="padding:8px 6px">
                 <div style="display: flex; gap: 4px; flex-wrap: wrap;">
                     <button class="btn small removeRow" style="padding: 6px 8px; font-size: 12px;">删除</button>
-                    <button class="btn small secondary toggleType" style="padding: 6px 8px; font-size: 12px;">${ row.type==='fixed' ? '固定' : '计用量' }</button>
+                    <button class="btn small secondary toggleType" style="padding: 6px 8px; font-size: 12px;">${row.type === 'fixed' ? '固定' : '计用量'}</button>
                 </div>
             </td>
-        </tr>`
-    })
+        </tr>`;
+    });
+
     html += '</tbody></table>'
     wrap.innerHTML = html
-    tableContainer.innerHTML = ''; tableContainer.appendChild(wrap)
+    tableContainer.innerHTML = ''; 
+    tableContainer.appendChild(wrap)
 
+    // 其余的事件监听逻辑保持不变...
     const tbody = tableContainer.querySelector('#tblBody')
     function updateRow(tr){
         const i = parseInt(tr.getAttribute('data-i'))
@@ -625,22 +826,31 @@ function renderTable(template){
         const tplRow = db.customers[customerSelect.value].template[i]
         const usageField = tr.querySelector('[data-field=usage]')
         const amountField = tr.querySelector('[data-field=amount]')
-        // if template marks fixed type
+        
         if(tplRow && tplRow.type === 'fixed'){
-            // allow editing fixed amount by editing amountField directly
             const fixedVal = toNumberOrNaN(amountField.value)
             if(!isNaN(fixedVal)) amountField.value = integerPart(fixedVal)
             usageField.value = ''
         } else {
-            // usage calculation if both numbers present
-            if(!isNaN(cur) && !isNaN(prev)){ const usage = cur - prev; usageField.value = integerPart(usage) } else usageField.value = ''
+            if(!isNaN(cur) && !isNaN(prev)){ 
+                const usage = cur - prev; 
+                usageField.value = integerPart(usage) 
+            } else {
+                usageField.value = ''
+            }
             const usageNum = toNumberOrNaN(usageField.value)
-            if(!isNaN(usageNum) && !isNaN(up)){ const amt = usageNum * up; amountField.value = integerPart(Math.floor(amt)) } else amountField.value = ''
+            if(!isNaN(usageNum) && !isNaN(up)){ 
+                const amt = usageNum * up; 
+                amountField.value = integerPart(Math.floor(amt)) 
+            } else {
+                amountField.value = ''
+            }
         }
         calcTotal()
     }
+    
     // initial update
-    tbody.querySelectorAll('tr').forEach(tr=> updateRow(tr))
+    tbody.querySelectorAll('tr').forEach(tr => updateRow(tr));
     tbody.addEventListener('input', (e)=>{
         const tr = e.target.closest('tr'); if(!tr) return; updateRow(tr)
     })
@@ -662,8 +872,19 @@ function renderTable(template){
             if(!db.customers[customer] || !db.customers[customer].template) return
             const t = db.customers[customer].template[idx]
             if(!t) return
-            if(t.type === 'fixed'){ t.type='usage'; delete t.fixedAmount; t.cur=''; t.prev=''; t.unitPrice = t.unitPrice || 0.9 }
-            else { t.type='fixed'; t.fixedAmount = t.fixedAmount || 0; delete t.cur; delete t.prev; t.unitPrice = t.unitPrice || 0 }
+            if(t.type === 'fixed'){ 
+                t.type='usage'; 
+                delete t.fixedAmount; 
+                t.cur=''; 
+                t.prev=''; 
+                t.unitPrice = t.unitPrice || 0.9 
+            } else { 
+                t.type='fixed'; 
+                t.fixedAmount = t.fixedAmount || 0; 
+                delete t.cur; 
+                delete t.prev; 
+                t.unitPrice = t.unitPrice || 0 
+            }
             saveDB(db); buildTable()
         }
     })
@@ -703,20 +924,11 @@ function readItemsFromUI(){
     return items
 }
 
-/* 保存当前月数据 */
-btnSave.addEventListener('click', ()=>{
-    const customer = customerSelect.value, ym = yearmonthInput.value
-    if(!customer || !ym) return alert('请选择客户与月份')
-    const key = monthKey(customer, ym)
-    const items = readItemsFromUI()
-    db.records[key] = { meta:{ savedAt: new Date().toISOString() }, items }
-    // update template skeleton: keep names, types, unitPrices, fixed flags
-    db.customers[customer].template = getTemplateFromUI()
-    saveDB(db)
-    alert('✅ 已保存本月数据（本地）')
-})
+/* 保存当前月数据 - 绑定到新的保存逻辑 */
+btnSave.addEventListener('click', saveCurrentMonth);
 
 /* get template skeleton from current UI (for persisting template) */
+/* 修复获取模板函数 */
 function getTemplateFromUI(){
     const rows = tableContainer.querySelectorAll('tbody tr')
     const tpl = []
@@ -726,10 +938,27 @@ function getTemplateFromUI(){
         const prev = tr.querySelector('[data-field=prev]').value
         const unitPrice = toNumberOrNaN(tr.querySelector('[data-field=unitPrice]').value)
         const amount = toNumberOrNaN(tr.querySelector('[data-field=amount]').value)
+
+        // ✅ 修复：从DOM属性获取ID，确保一致性
+        const existingId = tr.getAttribute('data-id') || `r${idx}`
+        
         if((cur==='' && prev==='') && !isNaN(amount)){
-            tpl.push({ id:'r'+idx, name, type:'fixed', fixedAmount: integerPart(amount), unitPrice: isNaN(unitPrice)?0:unitPrice })
+            tpl.push({ 
+                id: existingId, 
+                name, 
+                type:'fixed', 
+                fixedAmount: integerPart(amount), 
+                unitPrice: isNaN(unitPrice)?0:unitPrice 
+            })
         } else {
-            tpl.push({ id:'r'+idx, name, type:'usage', cur: cur||'', prev: prev||'', unitPrice: isNaN(unitPrice)?0:unitPrice })
+            tpl.push({ 
+                id: existingId, 
+                name, 
+                type:'usage', 
+                cur: cur||'', 
+                prev: prev||'', 
+                unitPrice: isNaN(unitPrice)?0:unitPrice 
+            })
         }
     })
     return tpl
@@ -893,7 +1122,7 @@ btnExportJpg.addEventListener('click', async ()=>{
 
 /* 构造导出 HTML（自适应 4:3 比例，直接显示金额，去掉分列） */
 function buildExportTemplateHtml(customer, items, total){
-    const FONT_SCALE = 2.8;  // ★ 调大或调小只改这个
+    const FONT_SCALE = 2;  // ★ 调大或调小只改这个
 
     let rowsHtml = '';
     items.forEach((it, idx)=>{
@@ -943,7 +1172,7 @@ function buildExportTemplateHtml(customer, items, total){
         </tr>
 
         <tr>
-            <td colspan="2" style="font-size:${26*FONT_SCALE}px;padding:18px 12px;">日期：</td>
+            <td colspan="2" style="font-size:${26*FONT_SCALE}px;padding:18px 12px;">填写日期：</td>
             <td colspan="2" style="font-size:${26*FONT_SCALE}px;padding:18px 12px;">${todayStr}</td>
             <td colspan="3" style="font-size:${26*FONT_SCALE}px;padding:18px 12px;">填写人：羊</td>
         </tr>
@@ -953,11 +1182,157 @@ function buildExportTemplateHtml(customer, items, total){
     </div>`;
 }
 
+// ================== 月份切换相关函数 ==================
+
+/* 修复的月份切换逻辑 */
+function switchToMonth(ym) {
+  const customer = customerSelect.value;
+  if (!customer) {
+    alert('请先选择客户');
+    return;
+  }
+  
+  const currentYm = yearmonthInput.value;
+  
+  // ✅ 自动保存当前月份数据（如果当前月份有数据）
+  const currentItems = readItemsFromUI();
+  if (currentItems.length > 0 && hasDataChanges(currentItems)) {
+    console.log(`💾 自动保存 ${currentYm} 月数据`);
+    saveCurrentMonth();
+  }
+
+  console.log(`🔄 切换到月份: ${ym}, 客户: ${customer}`);
+  
+  // 更新月份输入框
+  yearmonthInput.value = ym;
+  
+  // 重新构建表格
+  buildTable();
+  
+  // 更新月份显示
+  const currentMonthDisplay = document.getElementById('currentMonthDisplay');
+  if (currentMonthDisplay) {
+    currentMonthDisplay.textContent = ym;
+  }
+  
+  // 显示月份切换提示
+  showMonthSwitchMessage(ym);
+}
+
+/* 月份切换提示 */
+function showMonthSwitchMessage(newMonth) {
+  const lastMonth = prevMonth(newMonth);
+  const hasLastMonthData = db.records[monthKey(customerSelect.value, lastMonth)];
+  
+  let message = `已切换到 ${newMonth} 月`;
+  
+  if (hasLastMonthData) {
+    message += `\n• 已从 ${lastMonth} 月继承数据`;
+    message += `\n• 用量项目的"上月表数"已自动填写`;
+    message += `\n• 请填写本月的"本月表数"`;
+  } else {
+    message += `\n• 这是一个新的计费周期`;
+    message += `\n• 请填写所有项目的初始数据`;
+  }
+  
+  showToast(message, 'info', 5000);
+}
+
+/* 改进的保存逻辑 */
+function saveCurrentMonth() {
+  const customer = customerSelect.value;
+  const ym = yearmonthInput.value;
+  
+  if (!customer || !ym) return;
+  
+  const items = readItemsFromUI();
+  const key = monthKey(customer, ym);
+  
+  // 验证数据完整性
+  const validation = validateMonthData(items, ym);
+  if (!validation.isValid) {
+    alert(`数据不完整：\n${validation.errors.join('\n')}`);
+    return;
+  }
+  
+  db.records[key] = {
+    meta: {
+      savedAt: new Date().toISOString(),
+      customer: customer,
+      yearmonth: ym,
+      total: calcTotal()
+    },
+    items: items
+  };
+  
+  // 更新模板结构
+  db.customers[customer].template = getTemplateFromUI();
+  saveDB(db);
+  showToast(`${ym} 月数据已保存`, 'success');
+  
+  // 更新状态显示
+  updateMonthStatus(customer, ym);
+}
 
 /* 事件：切换月份/客户 */
-btnNewMonth.addEventListener('click', buildTable)
+// 替换原有的新建月份按钮事件
+btnNewMonth.removeEventListener('click', buildTable);
+btnNewMonth.addEventListener('click', () => {
+  const newMonth = prompt('请输入要切换的年月（格式：YYYY-MM）：', yearmonthInput.value);
+  if (newMonth && /^\d{4}-\d{2}$/.test(newMonth)) {
+    switchToMonth(newMonth);
+  }
+});
+
 customerSelect.addEventListener('change', buildTable)
 yearmonthInput.addEventListener('change', buildTable)
+
+// 月份导航事件（如果月份导航按钮已添加到HTML中）
+document.getElementById('btnPrevMonth')?.addEventListener('click', () => {
+  const current = yearmonthInput.value;
+  const prev = prevMonth(current);
+  switchToMonth(prev);
+});
+
+document.getElementById('btnNextMonth')?.addEventListener('click', () => {
+  const current = yearmonthInput.value;
+  const next = nextMonth(current);
+  switchToMonth(next);
+});
+
+/* 添加清理空月份数据的功能 */
+function cleanupEmptyMonthData() {
+  console.log('🧹 开始清理空数据月份...');
+  let cleanedCount = 0;
+  
+  Object.keys(db.records).forEach(key => {
+    const record = db.records[key];
+    if (record && record.items) {
+      const hasRealData = record.items.some(item => {
+        if (item.type === 'usage') {
+          return item.cur !== '' || item.prev !== '';
+        } else {
+          return item.fixedAmount > 0;
+        }
+      });
+      
+      if (!hasRealData) {
+        console.log(`🗑️ 清理空数据月份: ${key}`);
+        delete db.records[key];
+        cleanedCount++;
+      }
+    }
+  });
+  
+  if (cleanedCount > 0) {
+    saveDB(db);
+    console.log(`✅ 已清理 ${cleanedCount} 个空数据月份`);
+  } else {
+    console.log('✅ 没有需要清理的空数据月份');
+  }
+  
+  return cleanedCount;
+}
 
 /* 自动加载当前月表单（页面打开自动切换到当前月） */
 window.addEventListener('load', ()=> {
@@ -969,7 +1344,19 @@ window.addEventListener('load', ()=> {
     // load saved token if any into input
     const savedToken = loadGhToken()
     if(savedToken) ghTokenInput.value = savedToken
-})
+    
+    // 初始化月份状态显示
+    updateMonthStatus(customerSelect.value, yearmonthInput.value);
+    
+    // 更新月份显示
+    const currentMonthDisplay = document.getElementById('currentMonthDisplay');
+    if (currentMonthDisplay) {
+        currentMonthDisplay.textContent = yearmonthInput.value;
+    } // ✅ 修复：添加缺失的闭合大括号
+
+    // 清理空数据月份
+    cleanupEmptyMonthData();
+}); // ✅ 修复：添加缺失的闭合括号
 
 /* 辅助 */
 function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;') }
