@@ -893,68 +893,66 @@ btnExportJpg.addEventListener('click', async ()=>{
 
 /* 构造导出 HTML（自适应 4:3 比例，直接显示金额，去掉分列） */
 function buildExportTemplateHtml(customer, items, total){
-    // build rows
-    let rowsHtml = ''
+    const FONT_SCALE = 2.5;  // ★ 调大或调小只改这个
+
+    let rowsHtml = '';
     items.forEach((it, idx)=>{
-        rowsHtml += `<tr>
-            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${idx+1}</td>
-            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(it.name)}</td>
-            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(it.cur)}</td>
-            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(it.prev)}</td>
-            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(it.usage)}</td>
-            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(it.unitPrice)}</td>
-            <td class="tg-nrix" style="font-size:28px;padding:20px 10px;">${escapeHtml(String(it.amount))}</td>
+        rowsHtml += `
+        <tr>
+            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${idx+1}</td>
+            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(it.name)}</td>
+            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(it.cur)}</td>
+            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(it.prev)}</td>
+            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(it.usage)}</td>
+            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(it.unitPrice)}</td>
+            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(String(it.amount))}</td>
         </tr>`
-    })
-    
-    const todayStr = formatYMD(new Date())
-    
-    // HTML structure for 4:3 aspect ratio with larger fonts and better spacing
+    });
+
+    const todayStr = formatYMD(new Date());
+
     return `
     <div class="export-template" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#ffffff">
-    <table class="tg" style="table-layout: fixed; width: 90%; height: 85%; font-size:28px; border: 2px solid #000;">
-    <colgroup>
-        <col style="width: 8%">
-        <col style="width: 22%">
-        <col style="width: 12%">
-        <col style="width: 12%">
-        <col style="width: 10%">
-        <col style="width: 12%">
-        <col style="width: 12%">
-    </colgroup>
+    <table class="tg" style="table-layout: fixed; width: 90%; height: 85%; border: 2px solid #000;">
     <thead>
         <tr>
-            <th class="tg-rzxb" colspan="7" style="font-size:36px;padding:25px 20px;border-bottom:2px solid #000;">房屋出租收费单</th>
+            <th class="tg-rzxb" colspan="7" style="font-size:${36*FONT_SCALE}px;padding:25px 20px;">房屋出租收费单</th>
         </tr>
     </thead>
     <tbody>
         <tr>
-            <td class="tg-gqad" colspan="2" style="font-size:28px;padding:20px 15px;border-bottom:1px solid #000;">客户：</td>
-            <td class="tg-gqad" colspan="5" style="font-size:28px;padding:20px 15px;border-bottom:1px solid #000;">${escapeHtml(customer)}</td>
+            <td colspan="2" style="font-size:${28*FONT_SCALE}px;padding:20px 15px;">客户：</td>
+            <td colspan="5" style="font-size:${28*FONT_SCALE}px;padding:20px 15px;">${escapeHtml(customer)}</td>
         </tr>
+
         <tr style="background:#f8f9fa">
-            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">序号</td>
-            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">项目</td>
-            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">本月表数</td>
-            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">上月表数</td>
-            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">实用</td>
-            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">单价(元)</td>
-            <td class="tg-nrix" style="font-size:26px;padding:18px 12px;border:1px solid #000;">金额(元)</td>
+            <td style="font-size:${26*FONT_SCALE}px;">序号</td>
+            <td style="font-size:${26*FONT_SCALE}px;">项目</td>
+            <td style="font-size:${26*FONT_SCALE}px;">本月表数</td>
+            <td style="font-size:${26*FONT_SCALE}px;">上月表数</td>
+            <td style="font-size:${26*FONT_SCALE}px;">实用</td>
+            <td style="font-size:${26*FONT_SCALE}px;">单价(元)</td>
+            <td style="font-size:${26*FONT_SCALE}px;">金额(元)</td>
         </tr>
+
         ${rowsHtml}
+
         <tr>
-            <td class="tg-gqad" colspan="2" style="font-size:28px;padding:20px 15px;border-top:2px solid #000;">合计人民币</td>
-            <td class="tg-gqad" colspan="5" style="font-size:28px;padding:20px 15px;border-top:2px solid #000;">${integerPart(total)}元</td>
+            <td colspan="2" style="font-size:${28*FONT_SCALE}px;padding:20px 15px;">合计人民币</td>
+            <td colspan="5" style="font-size:${28*FONT_SCALE}px;padding:20px 15px;">${total}元</td>
         </tr>
+
         <tr>
-            <td class="tg-gqad" colspan="2" style="font-size:26px;padding:18px 12px;">日期：</td>
-            <td class="tg-gqad" colspan="2" style="font-size:26px;padding:18px 12px;">${escapeHtml(todayStr)}</td>
-            <td class="tg-gqad" colspan="3" style="font-size:26px;padding:18px 12px;">填写人：羊</td>
+            <td colspan="2" style="font-size:${26*FONT_SCALE}px;padding:18px 12px;">日期：</td>
+            <td colspan="2" style="font-size:${26*FONT_SCALE}px;padding:18px 12px;">${todayStr}</td>
+            <td colspan="3" style="font-size:${26*FONT_SCALE}px;padding:18px 12px;">填写人：羊</td>
         </tr>
+
     </tbody>
     </table>
-    </div>`
+    </div>`;
 }
+
 
 /* 事件：切换月份/客户 */
 btnNewMonth.addEventListener('click', buildTable)
