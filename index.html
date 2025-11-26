@@ -893,7 +893,7 @@ btnExportJpg.addEventListener('click', async ()=>{
 
 /* 构造导出 HTML（自适应 4:3 比例，直接显示金额，去掉分列） */
 function buildExportTemplateHtml(customer, items, total){
-    const FONT_SCALE = 2.5;  // ★ 调大或调小只改这个
+    const FONT_SCALE = 4;  // ★ 调大或调小只改这个
 
     let rowsHtml = '';
     items.forEach((it, idx)=>{
