@@ -1120,21 +1120,31 @@ btnExportJpg.addEventListener('click', async ()=>{
     }
 })
 
-/* 构造导出 HTML（自适应 4:3 比例，直接显示金额，去掉分列） */
+/* 构造导出 HTML（支持手动设置列宽） */
 function buildExportTemplateHtml(customer, items, total){
-    const FONT_SCALE = 2;  // ★ 调大或调小只改这个
+    const FONT_SCALE = 1.2;
 
+    /* ★★ 修改这里即可控制列宽 ★★ */
+    const COL_W = {
+    idx: "80px",
+    name: "300px",
+    cur: "160px",
+    prev: "160px",
+    usage: "120px",
+    price: "120px",
+    amount: "260px"
+};
     let rowsHtml = '';
     items.forEach((it, idx)=>{
         rowsHtml += `
         <tr>
-            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${idx+1}</td>
-            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(it.name)}</td>
-            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(it.cur)}</td>
-            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(it.prev)}</td>
-            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(it.usage)}</td>
-            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(it.unitPrice)}</td>
-            <td class="tg-nrix" style="font-size:${28*FONT_SCALE}px;padding:20px 10px;">${escapeHtml(String(it.amount))}</td>
+            <td style="width:${COL_W.idx}; font-size:${28*FONT_SCALE}px; padding:20px 10px;">${idx+1}</td>
+            <td style="width:${COL_W.name}; font-size:${28*FONT_SCALE}px; padding:20px 10px;">${escapeHtml(it.name)}</td>
+            <td style="width:${COL_W.cur}; font-size:${28*FONT_SCALE}px; padding:20px 10px;">${escapeHtml(it.cur)}</td>
+            <td style="width:${COL_W.prev}; font-size:${28*FONT_SCALE}px; padding:20px 10px;">${escapeHtml(it.prev)}</td>
+            <td style="width:${COL_W.usage}; font-size:${28*FONT_SCALE}px; padding:20px 10px;">${escapeHtml(it.usage)}</td>
+            <td style="width:${COL_W.price}; font-size:${28*FONT_SCALE}px; padding:20px 10px;">${escapeHtml(it.unitPrice)}</td>
+            <td style="width:${COL_W.amount}; font-size:${28*FONT_SCALE}px; padding:20px 10px;">${escapeHtml(String(it.amount))}</td>
         </tr>`
     });
 
@@ -1142,35 +1152,41 @@ function buildExportTemplateHtml(customer, items, total){
 
     return `
     <div class="export-template" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#ffffff">
-    <table class="tg" style="table-layout: fixed; width: 90%; height: 85%; border: 2px solid #000;">
+    <table class="tg"
+   style="width:100%; border: 2px solid #000; border-collapse: collapse;">
     <thead>
         <tr>
-            <th class="tg-rzxb" colspan="7" style="font-size:${36*FONT_SCALE}px;padding:25px 20px;">房屋出租收费单</th>
+            <th colspan="7" style="font-size:${40*FONT_SCALE}px;padding:25px 20px;">房屋出租收费单</th>
         </tr>
     </thead>
     <tbody>
+
         <tr>
             <td colspan="2" style="font-size:${28*FONT_SCALE}px;padding:20px 15px;">客户：</td>
             <td colspan="5" style="font-size:${28*FONT_SCALE}px;padding:20px 15px;">${escapeHtml(customer)}</td>
         </tr>
 
         <tr style="background:#f8f9fa">
-            <td style="font-size:${26*FONT_SCALE}px;">序号</td>
-            <td style="font-size:${26*FONT_SCALE}px;">项目</td>
-            <td style="font-size:${26*FONT_SCALE}px;">本月表数</td>
-            <td style="font-size:${26*FONT_SCALE}px;">上月表数</td>
-            <td style="font-size:${26*FONT_SCALE}px;">实用</td>
-            <td style="font-size:${26*FONT_SCALE}px;">单价(元)</td>
-            <td style="font-size:${26*FONT_SCALE}px;">金额(元)</td>
+            <td style="width:${COL_W.idx}; font-size:${26*FONT_SCALE}px;">序号</td>
+            <td style="width:${COL_W.name}; font-size:${26*FONT_SCALE}px;">项目</td>
+            <td style="width:${COL_W.cur}; font-size:${26*FONT_SCALE}px;">本月表数</td>
+            <td style="width:${COL_W.prev}; font-size:${26*FONT_SCALE}px;">上月表数</td>
+            <td style="width:${COL_W.usage}; font-size:${26*FONT_SCALE}px;">实用</td>
+            <td style="width:${COL_W.price}; font-size:${26*FONT_SCALE}px;">单价(元)</td>
+            <td style="width:${COL_W.amount}; font-size:${26*FONT_SCALE}px;">金额(元)</td>
         </tr>
+    </tbody>
 
-        ${rowsHtml}
+<tbody>
+    ${rowsHtml}
 
-        <tr>
-            <td colspan="2" style="font-size:${28*FONT_SCALE}px;padding:20px 15px;">合计人民币</td>
-            <td colspan="5" style="font-size:${28*FONT_SCALE}px;padding:20px 15px;">${total}元</td>
-        </tr>
+    <tr style="background:#ebebeb; font-weight:700;">
+        <td colspan="2" style="font-size:${28*FONT_SCALE}px;padding:20px 15px;">合计人民币</td>
+        <td colspan="5" style="font-size:${32*FONT_SCALE}px;padding:20px 15px;">${total}元</td>
+    </tr>
+</tbody>
 
+    <tbody>
         <tr>
             <td colspan="2" style="font-size:${26*FONT_SCALE}px;padding:18px 12px;">填写日期：</td>
             <td colspan="2" style="font-size:${26*FONT_SCALE}px;padding:18px 12px;">${todayStr}</td>
