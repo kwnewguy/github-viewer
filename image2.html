@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>图片批量调宽 1400 - BatchResize</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide-react/dist/lucide-react.umd.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#151f32', 900: '#0f172a' }
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                },
+            },
+        }
+    </script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // --- 1. 获取全局变量 ---
+        const { useState, useEffect, useCallback, useRef } = React;
+        const { Trash2, Archive, Zap, ShieldCheck, Download, Upload, FileImage, CheckCircle2, Loader2, XCircle } = lucideReact;
+        
+        // --- 2. 工具函数 (模拟 utils/imageProcessor.ts) ---
+        const resizeImage = (file, targetWidth) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    
+                    img.onload = () => {
+                        // 计算等比高度
+                        const scaleFactor = targetWidth / img.width;
+                        const targetHeight = Math.round(img.height * scaleFactor);
+                        
+                        // 创建 Canvas
+                        const canvas = document.createElement('canvas');
+                        canvas.width = targetWidth;
+                        canvas.height = targetHeight;
+                        
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+                        
+                        // 生成新文件名 (例如: image.jpg -> image14.jpg)
+                        const lastDotIndex = file.name.lastIndexOf('.');
+                        const nameWithoutExt = lastDotIndex !== -1 ? file.name.slice(0, lastDotIndex) : file.name;
+                        const ext = lastDotIndex !== -1 ? file.name.slice(lastDotIndex) : '';
+                        const newName = `${nameWithoutExt}14${ext}`;
+
+                        // 导出 Blob (保持原格式)
+                        canvas.toBlob((blob) => {
+                            if (!blob) {
+                                reject(new Error('图片转换失败'));
+                                return;
+                            }
+                            
+                            resolve({
+                                newName: newName,
+                                blob: blob,
+                                status: 'completed',
+                                url: URL.createObjectURL(blob),
+                                newSize: blob.size,
+                                width: targetWidth,
+                                height: targetHeight
+                            });
+                        }, file.type, 0.92); // 0.92 是图片质量
+                    };
+                    
+                    img.onerror = (err) => reject(new Error('图片加载失败'));
+                };
+                
+                reader.onerror = (err) => reject(new Error('文件读取失败'));
+            });
+        };
+
+        const formatSize = (bytes) => {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        };
+
+        // --- 3. 组件: DropZone (补全) ---
+        const DropZone = ({ onFilesDropped, isProcessing }) => {
+            const [isDragging, setIsDragging] = useState(false);
+            const fileInputRef = useRef(null);
+
+            const handleDragOver = (e) => {
+                e.preventDefault();
+                setIsDragging(true);
+            };
+
+            const handleDragLeave = () => {
+                setIsDragging(false);
+            };
+
+            const handleDrop = (e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                if (isProcessing) return;
+                
+                const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+                if (files.length > 0) {
+                    onFilesDropped(files);
+                }
+            };
+
+            const handleFileInput = (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length > 0) {
+                    onFilesDropped(files);
+                }
+                // Reset input
+                e.target.value = null;
+            };
+
+            return (
+                <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => !isProcessing && fileInputRef.current?.click()}
+                    className={`
+                        relative group cursor-pointer rounded-2xl border-2 border-dashed transition-all duration-300 p-8 sm:p-12 text-center
+                        ${isDragging 
+                            ? 'border-blue-500 bg-blue-500/10 scale-[1.01]' 
+                            : 'border-slate-700 hover:border-blue-400 hover:bg-slate-800/50'
+                        }
+                        ${isProcessing ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}
+                    `}
+                >
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileInput} 
+                        className="hidden" 
+                        multiple 
+                        accept="image/*"
+                    />
+                    
+                    <div className="flex flex-col items-center gap-4">
+                        <div className={`p-4 rounded-full transition-colors ${isDragging ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 group-hover:bg-blue-500/20 group-hover:text-blue-400'}`}>
+                            <Upload size={32} />
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-lg font-medium text-slate-200">
+                                点击或拖拽图片到这里
+                            </p>
+                            <p className="text-sm text-slate-500">
+                                支持 JPG, PNG, WebP
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 4. 组件: ProcessedList (补全) ---
+        const ProcessedList = ({ images }) => {
+            if (images.length === 0) return null;
+
+            return (
+                <div className="mt-8 space-y-3">
+                    {images.map((img) => (
+                        <div key={img.id} className="group flex items-center gap-4 p-3 rounded-xl bg-slate-800/40 border border-slate-700/50 hover:border-slate-600 transition-all">
+                            {/* 缩略图 / 图标 */}
+                            <div className="w-12 h-12 flex-shrink-0 rounded-lg bg-slate-800 overflow-hidden flex items-center justify-center border border-slate-700">
+                                {img.url ? (
+                                    <img src={img.url} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                    <FileImage size={20} className="text-slate-500" />
+                                )}
+                            </div>
+
+                            {/* 信息 */}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                    <h4 className="font-medium text-slate-200 truncate text-sm" title={img.newName || img.originalName}>
+                                        {img.newName || img.originalName}
+                                    </h4>
+                                </div>
+                                <div className="flex items-center gap-3 text-xs text-slate-500">
+                                    <span>原: {formatSize(img.originalSize)}</span>
+                                    {img.newSize > 0 && (
+                                        <>
+                                            <span className="text-slate-600">→</span>
+                                            <span className="text-blue-400 font-medium">{formatSize(img.newSize)}</span>
+                                            <span className="px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400">
+                                                {img.width}px
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* 状态 & 动作 */}
+                            <div className="flex items-center gap-3 pr-2">
+                                {img.status === 'processing' && (
+                                    <Loader2 className="animate-spin text-blue-500" size={20} />
+                                )}
+                                {img.status === 'completed' && (
+                                    <>
+                                        <CheckCircle2 className="text-green-500" size={20} />
+                                        <button 
+                                            onClick={() => window.saveAs(img.blob, img.newName)}
+                                            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                                            title="下载此图片"
+                                        >
+                                            <Download size={18} />
+                                        </button>
+                                    </>
+                                )}
+                                {img.status === 'error' && (
+                                    <div className="flex items-center gap-2 text-red-400">
+                                        <span className="text-xs hidden sm:inline">{img.errorMessage}</span>
+                                        <XCircle size={20} />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        };
+
+        // --- 5. 主程序: App (你的代码，稍作调整) ---
+        const MAX_BATCH_SIZE = 20;
+
+        function App() {
+            const [images, setImages] = useState([]);
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [error, setError] = useState(null);
+
+            // 清理内存
+            useEffect(() => {
+                return () => {
+                    images.forEach((img) => {
+                        if (img.url) URL.revokeObjectURL(img.url);
+                    });
+                };
+            }, [images]);
+
+            const processBatch = async (newFiles) => {
+                setError(null);
+                setIsProcessing(true);
+
+                const newImages = newFiles.map((file) => ({
+                    id: Math.random().toString(36).substr(2, 9),
+                    originalFile: file,
+                    originalName: file.name,
+                    newName: '',
+                    status: 'pending',
+                    blob: null,
+                    url: null,
+                    originalSize: file.size,
+                    newSize: 0,
+                    width: 0,
+                    height: 0,
+                }));
+
+                setImages((prev) => [...prev, ...newImages]);
+
+                // 串行处理，防止卡顿
+                for (const imgWrapper of newImages) {
+                    setImages(current => current.map(item => item.id === imgWrapper.id ? {...item, status: 'processing'} : item));
+                    
+                    try {
+                        const result = await resizeImage(imgWrapper.originalFile, 1400);
+                        
+                        setImages(current => current.map(item => 
+                            item.id === imgWrapper.id 
+                            ? { ...item, ...result }
+                            : item
+                        ));
+                    } catch (err) {
+                        console.error(err);
+                        setImages(current => current.map(item => 
+                            item.id === imgWrapper.id 
+                            ? { ...item, status: 'error', errorMessage: '处理失败' }
+                            : item
+                        ));
+                    }
+                }
+
+                setIsProcessing(false);
+            };
+
+            const handleFilesDropped = (files) => {
+                if (images.length + files.length > MAX_BATCH_SIZE) {
+                    setError(`单次批量处理限制为 ${MAX_BATCH_SIZE} 张图片。请清空列表后继续添加。`);
+                    return;
+                }
+                processBatch(files);
+            };
+
+            const handleClearAll = () => {
+                if (isProcessing) return;
+                setImages([]);
+                setError(null);
+            };
+
+            const handleDownloadAllZip = async () => {
+                const zip = new JSZip();
+                const completedImages = images.filter((img) => img.status === 'completed' && img.blob);
+                
+                if (completedImages.length === 0) return;
+
+                completedImages.forEach((img) => {
+                    if (img.blob) {
+                        zip.file(img.newName, img.blob);
+                    }
+                });
+
+                const content = await zip.generateAsync({ type: 'blob' });
+                window.saveAs(content, 'resized_images_1400px.zip');
+            };
+
+            const handleDownloadAllIndividual = () => {
+                const completedImages = images.filter((img) => img.status === 'completed' && img.blob);
+                
+                if (completedImages.length === 0) return;
+
+                completedImages.forEach((img, index) => {
+                    setTimeout(() => {
+                        if (img.blob) {
+                            window.saveAs(img.blob, img.newName);
+                        }
+                    }, index * 300);
+                });
+            };
+
+            const completedCount = images.filter(i => i.status === 'completed').length;
+            const isAllCompleted = completedCount > 0 && completedCount === images.length;
+
+            return (
+                <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-500/30">
+                    <div className="max-w-3xl mx-auto px-4 py-12 md:py-20">
+                        
+                        {/* Header */}
+                        <div className="text-center mb-10 space-y-4">
+                            <div className="inline-flex items-center justify-center p-3 bg-blue-500/10 rounded-2xl mb-2 ring-1 ring-blue-500/20 shadow-[0_0_30px_-10px_rgba(59,130,246,0.5)]">
+                                <Zap className="text-blue-400" size={32} strokeWidth={2.5} />
+                            </div>
+                            <h1 className="text-4xl md:text-5xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+                                图片批量调宽<span className="text-blue-500">1400</span>
+                            </h1>
+                            <p className="text-slate-400 text-lg max-w-lg mx-auto leading-relaxed">
+                                浏览器本地极速处理，自动调整图片宽度至 1400px 并保留原格式。
+                                <br className="hidden sm:block"/>
+                                安全、快速、无需上传服务器。
+                            </p>
+                            <div className="flex justify-center items-center gap-4 text-xs font-medium text-slate-500 uppercase tracking-wider pt-2">
+                                <span className="flex items-center gap-1"><ShieldCheck size={14}/> 本地处理</span>
+                                <span className="w-1 h-1 rounded-full bg-slate-700"></span>
+                                <span>自动重命名</span>
+                                <span className="w-1 h-1 rounded-full bg-slate-700"></span>
+                                <span>ZIP 导出</span>
+                            </div>
+                        </div>
+
+                        {/* Main Card */}
+                        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 shadow-2xl">
+                            
+                            <DropZone onFilesDropped={handleFilesDropped} isProcessing={isProcessing} />
+
+                            {error && (
+                                <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl text-sm text-center">
+                                    {error}
+                                </div>
+                            )}
+
+                            {/* Action Bar */}
+                            {images.length > 0 && (
+                                <div className="flex flex-col md:flex-row items-center justify-between gap-3 mt-8 pb-4 border-b border-slate-800">
+                                    <div className="text-sm text-slate-400 font-medium">
+                                        {completedCount} / {images.length} 已完成
+                                    </div>
+                                    
+                                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                                        <button
+                                            onClick={handleClearAll}
+                                            disabled={isProcessing}
+                                            className="w-full sm:w-auto flex items-center justify-center space-x-2 px-4 py-2 text-sm font-medium text-slate-400 bg-slate-800 hover:bg-slate-700 hover:text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <Trash2 size={16} />
+                                            <span>清空列表</span>
+                                        </button>
+
+                                        <div className="flex w-full sm:w-auto gap-2">
+                                            <button
+                                                onClick={handleDownloadAllIndividual}
+                                                disabled={!isAllCompleted}
+                                                className="flex-1 sm:flex-none flex items-center justify-center space-x-2 px-4 py-2 text-sm font-medium text-blue-100 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                title="逐个下载所有文件"
+                                            >
+                                                <Download size={16} />
+                                                <span>批量逐个下载</span>
+                                            </button>
+
+                                            <button
+                                                onClick={handleDownloadAllZip}
+                                                disabled={!isAllCompleted}
+                                                className="flex-1 sm:flex-none flex items-center justify-center space-x-2 px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-lg shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                                            >
+                                                <Archive size={16} />
+                                                <span>打包下载 (ZIP)</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <ProcessedList images={images} />
+                        </div>
+                        
+                        <div className="mt-8 text-center text-slate-600 text-xs">
+                            单次最多处理 20 张图片。文件将自动添加后缀 "14"。
+                        </div>
+
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
